@@ -1,0 +1,16 @@
+{
+  "name": "backbone-cache",
+  "version": "0.0.1",
+  "main": "backbone-cache.js",
+  "dependencies": {
+    "jquery": "~2.0.0",
+    "backbone-amd": "~1.0.0",
+    "jscache": "*",
+    "underscore-amd": "~1.4.4"
+  },
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "components"
+  ]
+}
