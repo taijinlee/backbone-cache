@@ -19,6 +19,13 @@
   };
   Backbone.cache.dirty = Backbone.cache.removeItem;
 
+  Backbone.Model.prototype.cacheModel = function() {
+    var attributes = this.attributes;
+    if (!attributes.id) { return; } // don't cache anything without an id
+    Backbone.cache.set(this.url, attributes);
+    return this;
+  };
+
   var backboneSync = Backbone.sync;
   Backbone.sync = function(method, model, options) {
     var url = _.result(model, 'url');
