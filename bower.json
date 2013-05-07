@@ -2,7 +2,6 @@
   "name": "backbone-cache",
   "version": "0.0.2",
   "main": "backbone-cache.js",
-  "commit": "861b036e8c056f720898e8c44eac1e9935f4fca8",
   "repository": {
     "type": "git",
     "url": "git://github.com/taijinlee/backbone-cache.git"
