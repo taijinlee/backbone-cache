@@ -1,14 +1,14 @@
 (function(root, factory) {
   if (typeof define === 'function' && define.amd) {
     // AMD. Register as an anonymous module and set browser global
-    define(['underscore', 'jquery', 'backbone', 'jscache'], function(_, $, Backbone, JSCache) {
-      return (root.Backbone = factory(_, $, Backbone, JSCache));
+    define(['underscore', 'jquery', 'backbone', 'jscache', 'async'], function(_, $, Backbone, JSCache, async) {
+      return (root.Backbone = factory(_, $, Backbone, JSCache, async));
     });
   } else {
     // Browser globals
-    root.Backbone = factory(root._, $, root.Backbone, JSCache);
+    root.Backbone = factory(root._, $, root.Backbone, JSCache, async);
   }
-}(this, function(_, $, Backbone, JSCache) {
+}(this, function(_, $, Backbone, JSCache, async) {
 
   Backbone.cache = new JSCache(-1, false, new JSCache.LocalStorageCacheStorage('BackboneCache'));
   Backbone.cache.get = Backbone.cache.getItem;
@@ -19,40 +19,99 @@
   };
   Backbone.cache.dirty = Backbone.cache.removeItem;
 
-  Backbone.Model.prototype.cacheModel = function() {
+  Backbone.Model.prototype.cacheSet = function(expireSeconds, callback) {
     var attributes = this.attributes;
     if (!attributes.id) { return; } // don't cache anything without an id
-    Backbone.cache.set(this.url(), attributes);
-    return this;
+    Backbone.cache.set(_.result(this, 'url'), attributes, expireSeconds);
+    return callback(null, this);
+  };
+
+
+  Backbone.Model.prototype.cacheGet = function(callback) {
+    var url = _.result(this, 'url');
+    var cacheData = Backbone.cache.get(url);
+    if (!cacheData){
+      return callback(new Error('cache missed'));
+    }
+
+    this.set(cacheData);
+    return callback(null, this);
+  };
+
+  Backbone.Collection.prototype.cacheSet = function (expireSeconds, callback) {
+    var self = this;
+    async.each(this.models, function(model, done){
+      model.cache(expireSeconds, done);
+    }, function(err){
+      Backbone.cache.set(_.result(self, 'url'), self.pluck('id'), expireSeconds);
+      return callback(null, self);
+    });
+  };
+
+  Backbone.Collection.prototype.cacheGet = function (callback) {
+    var self = this;
+    var url = _.result(this, 'url');
+    var ids = Backbone.cache.get(url);
+
+    if (!ids){
+      return callback(new Error('cache missed'));
+    }
+
+    async.map(ids, function(id, done){
+      new model.model({id:id}).fetch({
+        cache:true, 
+        success: function(model, response, options){
+          done(null, model);
+        }
+      });
+    }, function(err, results){
+        model.add(results);
+        return callback(null, self);
+    });   
   };
 
   var backboneSync = Backbone.sync;
   Backbone.sync = function(method, model, options) {
-    var url = model.url();
+    var url = _.result(model, 'url');
     var expireSeconds = options.expireSeconds || null;
     var prefill = options.prefill || false;
 
-    if (method === 'read' && options.cache === true) {
-      var cached = Backbone.cache.get(url);
-      if (cached !== null) {
-        model.set(cached, { parse: true });
-        var mockXhr = new $.Deferred();
-        model.trigger('sync', model, mockXhr, options);
-        if (!prefill) {
-          return mockXhr.resolve(model);
-        } // otherwise fall through to do
-      }
-    }
-
-    model.on('sync', function(model, response, options) {
+    model.once('sync', function(model, response, options) {
       if (method === 'read') {
-        Backbone.cache.set(url, response, expireSeconds);
+        model.cache(expireSeconds);
       } else if (method === 'update' || method === 'patch' || method === 'delete') {
         Backbone.cache.dirty(url);
       }
     });
 
-    backboneSync.apply(this, arguments);
+    // no cache case
+    if (method !== 'read' || options.cache === false) {
+      return backboneSync.apply(this, arguments);
+    }
+
+    var self = this; 
+    var mockXhr = new $.Deferred();
+    model.cacheGet(function(error, model){
+      if (error){
+        return backboneSync.apply(this, arguments).done(function(){
+          mockXhr.resolve(model);
+        });
+      }
+      if (prefill) {
+        model.trigger('prefill', model, mockXhr, options);
+        return backboneSync.apply(self, arguments).done(function(){
+          mockXhr.resolve(model);
+        });
+      } else {
+        model.trigger('sync', model, mockXhr, options);
+        if (typeof options.success === 'function'){
+          options.success();
+        }
+        return mockXhr.resolve(model);
+      }
+    });
+
+    return mockXhr;
   };
 
   return Backbone;
