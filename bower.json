@@ -10,7 +10,8 @@
     "jquery": "~2.0.0",
     "backbone-amd": "~1.0.0",
     "jscache": "*",
-    "underscore-amd": "~1.4.4"
+    "underscore-amd": "~1.4.4",
+    "async": "~v0.2.5"
   },
   "ignore": [
     "**/.*",
